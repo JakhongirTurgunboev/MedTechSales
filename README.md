@@ -71,7 +71,7 @@ To get started with the project, follow these steps:
 
 
 ## API Documentation
-For detailed API documentation, visit [link_to_api_documentation].
+For detailed API documentation, visit http://localhost:8000/swagger/ after running the application.
 
 ## Configuration
 To customize the project, refer to the Configuration section in the README.
