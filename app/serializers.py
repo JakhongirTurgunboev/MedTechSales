@@ -1,33 +1,53 @@
-# serializers.py
 from rest_framework import serializers
 from .models import Employee, Client, Product, OrderProduct, Order
+
 
 class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
         fields = '__all__'
 
+
 class ClientSerializer(serializers.ModelSerializer):
     class Meta:
         model = Client
         fields = '__all__'
 
+
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
-        fields = '__all__'
+        fields = ['id', 'name', 'quantity', 'price']
+
 
 class OrderProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderProduct
-        fields = '__all__'
+        fields = ['product', 'quantity']
+
 
 class OrderSerializer(serializers.ModelSerializer):
-    products = OrderProductSerializer(many=True, read_only=True)
+    products = serializers.ListField(child=serializers.IntegerField(), write_only=True)
+    price = serializers.ReadOnlyField()
 
     class Meta:
         model = Order
-        fields = '__all__'
+        fields = ['client', 'employee', 'products', 'date', 'price']
+
+    def create(self, validated_data):
+        product_ids = validated_data.pop('products', [])
+        price = 0
+        for product_id in product_ids:
+            product = Product.objects.get(pk=product_id)
+            price += product.price
+        order = Order.objects.create(**validated_data, price=price)
+
+        for product_id in product_ids:
+            product = Product.objects.get(pk=product_id)
+
+            OrderProduct.objects.create(order=order, product=product, quantity=1)
+
+        return order
 
 
 class EmployeeStatisticsSerializer(serializers.Serializer):

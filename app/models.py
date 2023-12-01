@@ -1,6 +1,7 @@
 import datetime
 
 from django.db import models
+from django.utils import timezone
 
 
 class Employee(models.Model):
@@ -24,7 +25,7 @@ class Order(models.Model):
     client = models.ForeignKey(Client, on_delete=models.CASCADE)
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
     price = models.DecimalField(max_digits=15, decimal_places=2)
-    date = models.DateField(default=datetime.date.today())
+    date = models.DateField(default=timezone.now)
 
 
 class OrderProduct(models.Model):

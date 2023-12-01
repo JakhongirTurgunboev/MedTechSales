@@ -1,3 +1,6 @@
+from django.db import models
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 from rest_framework import viewsets
 from .models import Employee, Client, Product, Order, OrderProduct
 from .serializers import (
@@ -5,7 +8,7 @@ from .serializers import (
     ClientSerializer,
     ProductSerializer,
     OrderSerializer,
-    EmployeeStatisticsSummarySerializer, ClientStatisticsSerializer,
+    EmployeeStatisticsSummarySerializer, ClientStatisticsSerializer, OrderProductSerializer
 )
 from rest_framework import status
 from rest_framework.response import Response
@@ -28,12 +31,35 @@ class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
 
 
+class OrderProductViewSet(viewsets.ModelViewSet):
+    queryset = OrderProduct.objects.all()
+    serializer_class = OrderProductSerializer
+
+
 class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
 
 
 class EmployeeStatisticsViewSet(viewsets.ViewSet):
+    @swagger_auto_schema(
+        manual_parameters=[
+            openapi.Parameter(
+                'month',
+                in_=openapi.IN_QUERY,
+                type=openapi.TYPE_STRING,
+                description='Month parameter',
+                required=False,
+            ),
+            openapi.Parameter(
+                'year',
+                in_=openapi.IN_QUERY,
+                type=openapi.TYPE_STRING,
+                description='Year parameter',
+                required=False,
+            ),
+        ],
+    )
     def list(self, request, id, *args, **kwargs):
         # Get the employee
         try:
@@ -42,36 +68,76 @@ class EmployeeStatisticsViewSet(viewsets.ViewSet):
             return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
 
         # Get the month and year from the query parameters
-        month = request.query_params.get('month')
-        year = request.query_params.get('year')
+        month, year = None, None
+        if request.query_params.get('month'):
+            month = request.query_params.get('month')
+        if request.query_params.get('year'):
+            year = request.query_params.get('year')
 
-        # Filter orders based on employee, month, and year
-        orders = Order.objects.filter(employee=employee, date__month=month, date__year=year)
+        if month and year:
+            orders = Order.objects.filter(employee=employee, date__month=month, date__year=year)
+        elif month:
+            orders = Order.objects.filter(employee=employee, date__month=month)
+        elif year:
+            orders = Order.objects.filter(employee=employee, date__year=year)
+        else:
+            orders = Order.objects.filter(employee=employee)
 
         # Calculate statistics
         number_of_clients = orders.values('client').distinct().count()
-        number_of_products = OrderProduct.objects.filter(order__in=orders).count()
-        sum_of_sales = orders.aggregate(total_sales=Sum('price'))['total_sales']
+        counter = 0
+        total_price = 0
+        for order in orders:
+            order_product = OrderProduct.objects.filter(order_id=order.id)
+            total_price += sum(op.product.price for op in order_product)
+            counter += order_product.count()
 
         # Serialize the data
         serializer = EmployeeStatisticsSerializer({
             'employee_name': employee.full_name,
             'number_of_clients': number_of_clients,
-            'number_of_products': number_of_products,
-            'sum_of_sales': sum_of_sales,
+            'number_of_products': counter,
+            'sum_of_sales': total_price,
         })
 
         return Response(serializer.data)
 
 
 class EmployeeStatisticsSummaryViewSet(viewsets.ViewSet):
+    @swagger_auto_schema(
+        manual_parameters=[
+            openapi.Parameter(
+                'month',
+                in_=openapi.IN_QUERY,
+                type=openapi.TYPE_STRING,
+                description='Month parameter',
+                required=False,
+            ),
+            openapi.Parameter(
+                'year',
+                in_=openapi.IN_QUERY,
+                type=openapi.TYPE_STRING,
+                description='Year parameter',
+                required=False,
+            ),
+        ],
+    )
     def list(self, request, *args, **kwargs):
         # Get the month and year from the query parameters
-        month = request.query_params.get('month')
-        year = request.query_params.get('year')
+        month, year = None, None
+        if request.query_params.get('month'):
+            month = request.query_params.get('month')
+        if request.query_params.get('year'):
+            year = request.query_params.get('year')
 
-        # Filter orders based on month and year
-        orders = Order.objects.filter(date__month=month, date__year=year)
+        if month and year:
+            orders = Order.objects.filter(date__month=month, date__year=year)
+        elif month:
+            orders = Order.objects.filter(date__month=month)
+        elif year:
+            orders = Order.objects.filter(date__year=year)
+        else:
+            orders = Order.objects.all()
 
         # Calculate statistics
         employee_statistics = (
@@ -81,7 +147,7 @@ class EmployeeStatisticsSummaryViewSet(viewsets.ViewSet):
                 full_name=F('employee__full_name'),
                 number_of_clients=Count('client', distinct=True),
                 number_of_products=Count('orderproduct', distinct=True),
-                sum_of_sales=Sum('price')
+                sum_of_sales=Sum('orderproduct__product__price')
             )
         )
 
@@ -92,6 +158,24 @@ class EmployeeStatisticsSummaryViewSet(viewsets.ViewSet):
 
 
 class ClientStatisticsViewSet(viewsets.ViewSet):
+    @swagger_auto_schema(
+        manual_parameters=[
+            openapi.Parameter(
+                'month',
+                in_=openapi.IN_QUERY,
+                type=openapi.TYPE_STRING,
+                description='Month parameter',
+                required=False,
+            ),
+            openapi.Parameter(
+                'year',
+                in_=openapi.IN_QUERY,
+                type=openapi.TYPE_STRING,
+                description='Year parameter',
+                required=False,
+            ),
+        ],
+    )
     def list(self, request, id, *args, **kwargs):
         # Get the client
         try:
@@ -100,22 +184,35 @@ class ClientStatisticsViewSet(viewsets.ViewSet):
             return Response({"error": "Client not found"}, status=status.HTTP_404_NOT_FOUND)
 
         # Get the month and year from the query parameters
-        month = request.query_params.get('month')
-        year = request.query_params.get('year')
+        month, year = None, None
+        if request.query_params.get('month'):
+            month = request.query_params.get('month')
+        if request.query_params.get('year'):
+            year = request.query_params.get('year')
 
-        # Filter orders based on client, month, and year
-        orders = Order.objects.filter(client=client, date__month=month, date__year=year)
-
+        if month and year:
+            number_of_products_bought = Order.objects.filter(client_id=id, date__month=month, date__year=year)
+        elif month:
+            number_of_products_bought = Order.objects.filter(client_id=id, date__month=month)
+        elif year:
+            number_of_products_bought = Order.objects.filter(client_id=id, date__year=year)
+        else:
+            number_of_products_bought = Order.objects.filter(client_id=id)
         # Calculate statistics
-        number_of_products_bought = OrderProduct.objects.filter(order__in=orders).count()
-        amount_of_products = orders.aggregate(amount=Sum('price'))['amount']
+
+        counter = 0
+        total_price = 0
+        for order in number_of_products_bought:
+            order_product = OrderProduct.objects.filter(order_id=order.id)
+            total_price += sum(op.product.price for op in order_product)
+            counter += order_product.count()
 
         # Serialize the data
         serializer = ClientStatisticsSerializer({
             'client_id': client.id,
             'full_name': client.full_name,
-            'number_of_products_bought': number_of_products_bought,
-            'amount_of_products': amount_of_products,
+            'number_of_products_bought': counter,
+            'amount_of_products': total_price,
         })
 
         return Response(serializer.data)

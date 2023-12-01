@@ -1,0 +1,43 @@
+version: '3'
+
+services:
+  # Django web application
+  web:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+
+  # PostgreSQL database
+  db:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: sample
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+
+  # Pytest service
+  pytest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+    command: pytest
+    depends_on:
+      - web
+
+# Run migrations service
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+    command: python manage.py migrate
+    depends_on:
+      - db
